@@ -8,7 +8,7 @@ jobs:
   manage-preview-link:
     runs-on: ubuntu-latest
     steps:
-      - name: Manage Preview Link Comment
+      - name: Manage Preview Link Comment and PR Description
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -64,6 +64,7 @@ jobs:
               > Add the \`preview\` label to this PR to recreate the preview environment.`;
             }
             
+            // Update or create comment
             if (previewComment) {
               // Update existing comment
               await github.rest.issues.updateComment({
@@ -81,3 +82,34 @@ jobs:
                 body: commentBody
               });
             }
+            
+            // Update PR description to include preview URL
+            const prDesc = pr.body || '';
+            const previewSectionMarker = '<!-- PREVIEW_URL -->';
+            
+            let updatedDesc;
+            if (prDesc.includes(previewSectionMarker)) {
+              // Preview section already exists, update it
+              const previewRegex = new RegExp(`${previewSectionMarker}[\\s\\S]*?${previewSectionMarker}`);
+              
+              const previewSection = hasPreviewLabel
+                ? `${previewSectionMarker}\n\n## Preview\n\n🔗 [${previewUrl}](${previewUrl})\n\n${previewSectionMarker}`
+                : `${previewSectionMarker}\n\n## Preview\n\n~~Preview URL no longer active~~\n\n${previewSectionMarker}`;
+                
+              updatedDesc = prDesc.replace(previewRegex, previewSection);
+            } else {
+              // Preview section doesn't exist, add it at the end
+              const previewSection = hasPreviewLabel
+                ? `\n\n${previewSectionMarker}\n\n## Preview\n\n🔗 [${previewUrl}](${previewUrl})\n\n${previewSectionMarker}`
+                : `\n\n${previewSectionMarker}\n\n## Preview\n\n~~Preview URL no longer active~~\n\n${previewSectionMarker}`;
+                
+              updatedDesc = prDesc + previewSection;
+            }
+            
+            // Update PR description
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              body: updatedDesc
+            });
