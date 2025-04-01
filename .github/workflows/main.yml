@@ -26,63 +26,21 @@ jobs:
               .toLowerCase();
             
             const previewUrl = `https://${shortBranchName}.loculus.org`;
-            
-            // Get current PR description
             const prDesc = pr.body || '';
-            const previewSectionMarker = '<!-- PREVIEW_DEPLOYMENT -->';
-            const previewEndMarker = '<!-- END_PREVIEW_DEPLOYMENT -->';
             
-            let updatedDesc;
-            let previewSection;
+            // Create preview line
+            const previewLine = hasPreviewLabel 
+              ? `🔍 Preview: ${previewUrl}`
+              : `🔍 Preview: Add \`preview\` label to enable`;
+              
+            // Remove existing preview line if present
+            const previewRegex = /🔍 Preview:.*/g;
+            const descWithoutPreview = prDesc.replace(previewRegex, '').trim();
             
-            if (hasPreviewLabel) {
-              // Create decorated preview section for active preview
-              previewSection = `${previewSectionMarker}
-### 🔄 Preview Deployment
-
-> This PR has a preview deployment available:
-
-<table>
-  <tr>
-    <td><strong>🌐 Preview URL:</strong></td>
-    <td><a href="${previewUrl}">${previewUrl}</a></td>
-  </tr>
-  <tr>
-    <td><strong>🌿 Branch:</strong></td>
-    <td><code>${branchName}</code></td>
-  </tr>
-  <tr>
-    <td><strong>⏱️ Last updated:</strong></td>
-    <td>${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC</td>
-  </tr>
-</table>
-
-<details>
-  <summary>ℹ️ About preview environments</summary>
-  <p>Preview environments are automatically deployed when a PR has the <code>preview</code> label.</p>
-  <p>The environment updates each time new commits are pushed to this branch.</p>
-</details>
-${previewEndMarker}`;
-            } else {
-              // Create decorated preview section for inactive preview
-              previewSection = `${previewSectionMarker}
-### ⚠️ Preview Deployment (Inactive)
-
-> To enable a preview deployment, add the \`preview\` label to this PR.
-
-${previewEndMarker}`;
-            }
-            
-            if (prDesc.includes(previewSectionMarker) && prDesc.includes(previewEndMarker)) {
-              // Update existing preview section
-              const previewRegex = new RegExp(
-                `${previewSectionMarker}[\\s\\S]*?${previewEndMarker}`, 'g'
-              );
-              updatedDesc = prDesc.replace(previewRegex, previewSection);
-            } else {
-              // Add preview section at the end
-              updatedDesc = prDesc ? `${prDesc}\n\n${previewSection}` : previewSection;
-            }
+            // Add new preview line
+            const updatedDesc = descWithoutPreview 
+              ? `${descWithoutPreview}\n\n${previewLine}`
+              : previewLine;
             
             // Update PR description
             await github.rest.pulls.update({
