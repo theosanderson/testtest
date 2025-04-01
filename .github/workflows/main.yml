@@ -1,0 +1,43 @@
+name: PR Squash Commit Message
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  update-commit-message:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Git config
+        run: |
+          git config --local user.name "GitHub Actions"
+          git config --local user.email "actions@github.com"
+          
+      - name: Update squash commit message
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the SHA of the merge commit
+          MERGE_COMMIT_SHA=$(git rev-parse HEAD)
+          
+          # Create the commit message with PR title, number, and body
+          COMMIT_MSG="${PR_TITLE} (#${PR_NUMBER})"
+          
+          if [ ! -z "$PR_BODY" ]; then
+            COMMIT_MSG="${COMMIT_MSG}
+            
+            ${PR_BODY}"
+          fi
+          
+          # Update the commit message
+          git commit --amend -m "$COMMIT_MSG"
+          git push --force-with-lease
