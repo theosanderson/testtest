@@ -1,43 +1,60 @@
-name: PR Squash Commit Message
+name: Add Preview Link
 
 on:
   pull_request:
-    types: [closed]
+    types: [labeled, opened, synchronize, reopened]
 
 jobs:
-  update-commit-message:
-    if: github.event.pull_request.merged == true
+  add-preview-link:
     runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'preview')
+    
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - name: Add Preview Link Comment
+        uses: actions/github-script@v6
         with:
-          fetch-depth: 0
-          
-      - name: Set up Git config
-        run: |
-          git config --local user.name "GitHub Actions"
-          git config --local user.email "actions@github.com"
-          
-      - name: Update squash commit message
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get the SHA of the merge commit
-          MERGE_COMMIT_SHA=$(git rev-parse HEAD)
-          
-          # Create the commit message with PR title, number, and body
-          COMMIT_MSG="${PR_TITLE} (#${PR_NUMBER})"
-          
-          if [ ! -z "$PR_BODY" ]; then
-            COMMIT_MSG="${COMMIT_MSG}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const branchName = pr.head.ref;
             
-            ${PR_BODY}"
-          fi
-          
-          # Update the commit message
-          git commit --amend -m "$COMMIT_MSG"
-          git push --force-with-lease
+            // Format branch name exactly as in ArgoCD
+            const shortBranchName = branchName.substring(0, 25)
+              .replace(/_/g, "-")
+              .replace(/\//g, "-")
+              .replace(/\./g, "-")
+              .replace(/-+$/, "")
+              .toLowerCase();
+            
+            const previewUrl = `https://${shortBranchName}.loculus.org`;
+            
+            // Check if the comment already exists
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number
+            });
+            
+            const previewComment = comments.find(comment => 
+              comment.body.includes('Preview URL')
+            );
+            
+            const commentBody = `Preview URL: ${previewUrl}`;
+            
+            if (previewComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previewComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: commentBody
+              });
+            }
