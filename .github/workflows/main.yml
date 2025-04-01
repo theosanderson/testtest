@@ -1,22 +1,21 @@
-name: Add Preview Link
+name: Manage Preview Links
 
 on:
   pull_request:
-    types: [labeled, opened, synchronize, reopened]
+    types: [labeled, unlabeled, opened, synchronize, reopened]
 
 jobs:
-  add-preview-link:
+  manage-preview-link:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'preview')
-    
     steps:
-      - name: Add Preview Link Comment
+      - name: Manage Preview Link Comment
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
             const branchName = pr.head.ref;
+            const hasPreviewLabel = pr.labels.some(label => label.name === 'preview');
             
             // Format branch name exactly as in ArgoCD
             const shortBranchName = branchName.substring(0, 25)
@@ -36,10 +35,34 @@ jobs:
             });
             
             const previewComment = comments.find(comment => 
-              comment.body.includes('Preview URL')
+              comment.body.includes('Preview Environment')
             );
             
-            const commentBody = `Preview URL: ${previewUrl}`;
+            let commentBody;
+            
+            if (hasPreviewLabel) {
+              // Active preview link
+              commentBody = `## 🚀 Preview Environment
+              
+              A preview deployment for this branch is available at:
+              
+              🔗 **Preview URL:** [${previewUrl}](${previewUrl})
+              
+              🌿 **Branch:** \`${branchName}\`
+              
+              > This environment is automatically updated when new commits are pushed to this PR.`;
+            } else {
+              // Inactive/removed preview link
+              commentBody = `## ⚠️ Preview Environment (Inactive)
+              
+              The preview label has been removed from this PR.
+              
+              🔗 **Preview URL:** ~~${previewUrl}~~ (no longer active)
+              
+              🌿 **Branch:** \`${branchName}\`
+              
+              > Add the \`preview\` label to this PR to recreate the preview environment.`;
+            }
             
             if (previewComment) {
               // Update existing comment
@@ -49,8 +72,8 @@ jobs:
                 comment_id: previewComment.id,
                 body: commentBody
               });
-            } else {
-              // Create new comment
+            } else if (hasPreviewLabel) {
+              // Only create new comment if preview is active
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
